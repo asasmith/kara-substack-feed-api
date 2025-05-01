@@ -21,6 +21,14 @@ export class KaraSubstackFeedApiStack extends cdk.Stack {
             blockPublicAccess: blockPublicAccess,
             publicReadAccess: true,
             websiteIndexDocument: "feed.json",
+            cors: [
+                {
+                    allowedOrigins: ['*'],
+                    allowedMethods: [s3.HttpMethods.GET],
+                    allowedHeaders: ['*'],
+                    exposedHeaders: [],
+                },
+            ],
         });
 
         const substackLambda = new lambda.Function(this, "SubstackFeedLambda", {
