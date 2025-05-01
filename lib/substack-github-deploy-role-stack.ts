@@ -6,7 +6,7 @@ export class SubstackGithubDeployRoleStack extends cdk.Stack {
   constructor(scope: Construct, id: string) {
     super(scope, id);
 
-    const oicdProvidersArn = cdk.Arn.format(
+    const oidcProvidersArn = cdk.Arn.format(
       {
         service: "iam",
         region: "",
@@ -19,7 +19,7 @@ export class SubstackGithubDeployRoleStack extends cdk.Stack {
     const oidcProvider = iam.OpenIdConnectProvider.fromOpenIdConnectProviderArn(
       this,
       "GithubOIDC",
-      oicdProvidersArn,
+      oidcProvidersArn,
     );
 
     const githubDeployRole = new iam.Role(this, "GithubDeployRole", {
