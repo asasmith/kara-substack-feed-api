@@ -28,7 +28,7 @@ export class SubstackGithubDeployRoleStack extends cdk.Stack {
         {
           StringLike: {
             "token.actions.githubusercontent.com:sub":
-              "repo:asasmith/kara-substack-feed-api:ref:refs/heads/main",
+              "repo:asasmith/kara-substack-feed-api:*",
           },
         },
         "sts:AssumeRoleWithWebIdentity",
