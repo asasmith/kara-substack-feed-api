@@ -1,71 +1,52 @@
-import * as https from "https";
-import { APIGatewayProxyEvent } from "aws-lambda";
-
-export const handler = async function (event: APIGatewayProxyEvent) {
-  const body = event.body ? JSON.parse(event.body) : {};
-  const email = body.email;
-
-  if (!email) {
-    return {
-      statusCode: 400,
-      body: JSON.stringify({ error: "Email is required" }),
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-      },
-    };
-  }
-
-  const data = JSON.stringify({ email });
-
-  const options: https.RequestOptions = {
-    hostname: "saturday-paper.kararedman.com",
-    path: "/api/v1/free",
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Content-Length": Buffer.byteLength(data),
-    },
-  };
-
+export const handler = async (event: any) => {
   try {
-    const responseBody = await new Promise<string>((resolve, reject) => {
-      const req = https.request(options, (res) => {
-        let rawData = "";
+    const { email } = JSON.parse(event.body || "{}");
 
-        res.on("data", (chunk) => {
-          rawData += chunk;
-        });
+    if (!email) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ error: "Email is required" }),
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Content-Type": "application/json",
+        },
+      };
+    }
 
-        res.on("end", () => {
-          console.log("Substack status:", res.statusCode);
-          console.log("Substack response body:", rawData);
-          resolve(rawData);
-        });
-      });
+    const substackResponse = await fetch(
+      "https://kararedman.substack.com/api/v1/free",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email }),
+        redirect: "manual",
+      },
+    );
 
-      req.on("error", (e) => {
-        console.error("Error calling Substack:", e);
-        reject(e);
-      });
+    const responseText = await substackResponse.text();
 
-      req.write(data);
-      req.end();
-    });
+    console.log("Substack response status:", substackResponse.status);
+    console.log("Substack response body:", responseText);
 
     return {
-      statusCode: 200,
-      body: JSON.stringify({ message: "Subscribed", substackResponse: responseBody }),
+      statusCode: substackResponse.status,
+      body: responseText,
       headers: {
         "Access-Control-Allow-Origin": "*",
+        "Content-Type": "application/json",
       },
     };
-  } catch (err) {
-    console.error("Subscription error:", err);
+  } catch (error) {
+    console.error("Subscribe error:", error);
+
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: "Subscription failed" }),
+      body: JSON.stringify({ error: "Internal server error" }),
       headers: {
         "Access-Control-Allow-Origin": "*",
+        "Content-Type": "application/json",
       },
     };
   }
