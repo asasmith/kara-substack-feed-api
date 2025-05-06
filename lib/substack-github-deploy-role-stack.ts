@@ -70,5 +70,14 @@ export class SubstackGithubDeployRoleStack extends cdk.Stack {
         resources: ["*"],
       }),
     );
+
+    githubDeployRole.addToPolicy(
+      new iam.PolicyStatement({
+        actions: ["ssm:GetParameter"],
+        resources: [
+          "arn:aws:ssm:us-east-1:342811584933:parameter/cdk-bootstrap/hnb659fds/version",
+        ],
+      }),
+    );
   }
 }
