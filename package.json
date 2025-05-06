@@ -6,6 +6,8 @@
   },
   "scripts": {
     "build": "tsc",
+    "build:lambda": "tsc --project lambda/tsconfig.json",
+    "build:all": "npm run build && npm run build:lambda",
     "watch": "tsc -w",
     "test": "jest",
     "cdk": "cdk"

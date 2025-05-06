@@ -31,9 +31,9 @@ export class KaraSubstackFeedApiStack extends cdk.Stack {
             ],
         });
 
-        const substackLambda = new lambda.Function(this, "SubstackFeedLambda", {
+        const substackFeedLambda = new lambda.Function(this, "SubstackFeedLambda", {
             runtime: lambda.Runtime.NODEJS_22_X,
-            code: lambda.Code.fromAsset("lambda"),
+            code: lambda.Code.fromAsset("lambda/dist"),
             handler: "index.handler",
             environment: {
                 BUCKET_NAME: bucket.bucketName,
@@ -41,15 +41,37 @@ export class KaraSubstackFeedApiStack extends cdk.Stack {
             },
         });
 
-        bucket.grantPut(substackLambda);
+        bucket.grantPut(substackFeedLambda);
 
-        new apigateway.LambdaRestApi(this, "SubstackApiGateway", {
-            handler: substackLambda,
-            proxy: true,
+        const subscribeLambda = new lambda.Function(this, "SubstackSubscribeLambda", {
+            runtime: lambda.Runtime.NODEJS_22_X,
+            code: lambda.Code.fromAsset("lambda/dist"),
+            handler: "subscribe.handler",
+        });
+
+        const api = new apigateway.RestApi(this, "SubstackApiGateway", {
+            restApiName: "KaraSubstackApi",
             defaultCorsPreflightOptions: {
                 allowOrigins: apigateway.Cors.ALL_ORIGINS,
-                allowMethods: ["POST"],
+                allowMethods: apigateway.Cors.ALL_METHODS,
             },
         });
+
+        api.root.addProxy({
+            defaultIntegration: new apigateway.LambdaIntegration(substackFeedLambda),
+            anyMethod: true,
+        });
+
+        const subscribe = api.root.addResource("subscribe")
+        subscribe.addMethod("POST", new apigateway.LambdaIntegration(subscribeLambda), {
+            methodResponses: [
+                {
+                    statusCode: "200",
+                    responseParameters: {
+                        "method.response.header.Access-Control-Allow-Origin": true,
+                    },
+                },
+            ],
+        })
     }
 }

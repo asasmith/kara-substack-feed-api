@@ -1,5 +1,5 @@
 import { S3 } from "aws-sdk";
-import * as Parser from "rss-parser";
+import Parser from "rss-parser";
 
 interface LambdaEvent {
   httpMethod: string;
