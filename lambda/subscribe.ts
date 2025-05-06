@@ -28,20 +28,33 @@ export const handler = async function (event: APIGatewayProxyEvent) {
   };
 
   try {
-    await new Promise<void>((resolve, reject) => {
+    const responseBody = await new Promise<string>((resolve, reject) => {
       const req = https.request(options, (res) => {
-        res.on("data", () => {});
-        res.on("end", resolve);
+        let rawData = "";
+
+        res.on("data", (chunk) => {
+          rawData += chunk;
+        });
+
+        res.on("end", () => {
+          console.log("Substack status:", res.statusCode);
+          console.log("Substack response body:", rawData);
+          resolve(rawData);
+        });
       });
 
-      req.on("error", reject);
+      req.on("error", (e) => {
+        console.error("Error calling Substack:", e);
+        reject(e);
+      });
+
       req.write(data);
       req.end();
     });
 
     return {
       statusCode: 200,
-      body: JSON.stringify({ message: "Subscribed" }),
+      body: JSON.stringify({ message: "Subscribed", substackResponse: responseBody }),
       headers: {
         "Access-Control-Allow-Origin": "*",
       },
