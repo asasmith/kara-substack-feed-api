@@ -43,5 +43,8 @@ jobs:
       - name: Install CDK cli
         run: npm install -g aws-cdk
 
-      - name: Deploy CDK stack
+      - name: Deploy github deploy role stack
+        run: cdk deploy SubstackGithubDeployRoleStack --require-approval never
+
+      - name: Deploy substack stack
         run: cdk deploy KaraSubstackFeedApiStack --require-approval never
