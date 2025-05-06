@@ -33,7 +33,7 @@ export class KaraSubstackFeedApiStack extends cdk.Stack {
 
         const substackFeedLambda = new lambda.Function(this, "SubstackFeedLambda", {
             runtime: lambda.Runtime.NODEJS_22_X,
-            code: lambda.Code.fromAsset("lambda"),
+            code: lambda.Code.fromAsset("lambda/dist"),
             handler: "index.handler",
             environment: {
                 BUCKET_NAME: bucket.bucketName,
@@ -45,7 +45,7 @@ export class KaraSubstackFeedApiStack extends cdk.Stack {
 
         const subscribeLambda = new lambda.Function(this, "SubstackSubscribeLambda", {
             runtime: lambda.Runtime.NODEJS_22_X,
-            code: lambda.Code.fromAsset("lambda"),
+            code: lambda.Code.fromAsset("lambda/dist"),
             handler: "subscribe.handler",
         });
 
