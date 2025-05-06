@@ -19,6 +19,10 @@ export const handler = async (event: any) => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          Accept: "application/json, text/plain, */*",
+          "User-Agent":
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+          "X-Requested-With": "XMLHttpRequest",
         },
         body: JSON.stringify({ email }),
         redirect: "manual",
