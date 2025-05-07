@@ -1,57 +1,50 @@
+import { DynamoDBClient, PutItemCommand } from "@aws-sdk/client-dynamodb";
+
+const client = new DynamoDBClient({});
+const { TABLE_NAME } = process.env;
+
 export const handler = async (event: any) => {
   try {
-    const { email } = JSON.parse(event.body || "{}");
-
-    if (!email) {
+    if (!event.body) {
       return {
         statusCode: 400,
-        body: JSON.stringify({ error: "Email is required" }),
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Content-Type": "application/json",
-        },
+        body: JSON.stringify({ message: "Missing request body." }),
       };
     }
 
-    const substackResponse = await fetch(
-      "https://kararedman.substack.com/api/v1/free",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json, text/plain, */*",
-          "User-Agent":
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-          "X-Requested-With": "XMLHttpRequest",
-        },
-        body: JSON.stringify({ email }),
-        redirect: "manual",
+    const { email } = JSON.parse(event.body);
+    const isValidEmail = validateEmail(email);
+
+    if (!isValidEmail) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ message: "Invalid email." }),
+      };
+    }
+
+    const timestamp = new Date().toISOString();
+
+    const putCommand = new PutItemCommand({
+      TableName: TABLE_NAME,
+      Item: {
+        email: { S: email },
+        createdAt: { S: timestamp },
+        subscribed: { BOOL: false },
       },
-    );
+    });
 
-    const responseText = await substackResponse.text();
-
-    console.log("Substack response status:", substackResponse.status);
-    console.log("Substack response body:", responseText);
-
-    return {
-      statusCode: substackResponse.status,
-      body: responseText,
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Content-Type": "application/json",
-      },
-    };
+    await client.send(putCommand);
   } catch (error) {
-    console.error("Subscribe error:", error);
+        console.error(`Error: ${error}`)
 
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: "Internal server error" }),
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Content-Type": "application/json",
-      },
-    };
-  }
+        return {
+            statusCode: 500,
+            body: JSON.stringify({ message: "Internal server error" })
+        };
+    }
 };
+
+function validateEmail(email: string): boolean {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+}

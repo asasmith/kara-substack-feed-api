@@ -1,12 +1,23 @@
-import * as cdk from "aws-cdk-lib";
+import { Stack, StackProps, RemovalPolicy } from "aws-cdk-lib";
 import { Construct } from "constructs";
 import * as s3 from "aws-cdk-lib/aws-s3";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as apigateway from "aws-cdk-lib/aws-apigateway";
+import * as dynamoDb from "aws-cdk-lib/aws-dynamodb";
 
-export class KaraSubstackFeedApiStack extends cdk.Stack {
-    constructor(scope: Construct, id: string, props?: cdk.StackProps) {
+export class KaraSubstackFeedApiStack extends Stack {
+    constructor(scope: Construct, id: string, props?: StackProps) {
         super(scope, id, props);
+
+        const saturdayPaperTable = new dynamoDb.Table(this, "SaturdayPaperEmailSubs", {
+            tableName: 'SaturdayPaperEmailSubs',
+            partitionKey: {
+                name: 'email',
+                type: dynamoDb.AttributeType.STRING,
+            },
+            billingMode: dynamoDb.BillingMode.PAY_PER_REQUEST,
+            removalPolicy: RemovalPolicy.DESTROY,
+        });
 
         const blockPublicAccess = new s3.BlockPublicAccess({
             blockPublicAcls: false,
@@ -16,7 +27,7 @@ export class KaraSubstackFeedApiStack extends cdk.Stack {
         });
 
         const bucket = new s3.Bucket(this, "SubstackFeedBucket", {
-            removalPolicy: cdk.RemovalPolicy.DESTROY,
+            removalPolicy: RemovalPolicy.DESTROY,
             autoDeleteObjects: true,
             blockPublicAccess: blockPublicAccess,
             publicReadAccess: true,
@@ -47,7 +58,12 @@ export class KaraSubstackFeedApiStack extends cdk.Stack {
             runtime: lambda.Runtime.NODEJS_22_X,
             code: lambda.Code.fromAsset("lambda/dist"),
             handler: "subscribe.handler",
+            environment: {
+                TABLE_NAME: saturdayPaperTable.tableName,
+            },
         });
+
+        saturdayPaperTable.grantWriteData(subscribeLambda);
 
         const api = new apigateway.RestApi(this, "SubstackApiGateway", {
             restApiName: "KaraSubstackApi",
