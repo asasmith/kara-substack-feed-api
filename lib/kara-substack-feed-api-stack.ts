@@ -6,88 +6,93 @@ import * as apigateway from "aws-cdk-lib/aws-apigateway";
 import * as dynamoDb from "aws-cdk-lib/aws-dynamodb";
 
 export class KaraSubstackFeedApiStack extends Stack {
-    constructor(scope: Construct, id: string, props?: StackProps) {
-        super(scope, id, props);
+  constructor(scope: Construct, id: string, props?: StackProps) {
+    super(scope, id, props);
 
-        const saturdayPaperTable = new dynamoDb.Table(this, "SaturdayPaperEmailSubs", {
-            tableName: 'SaturdayPaperEmailSubs',
-            partitionKey: {
-                name: 'email',
-                type: dynamoDb.AttributeType.STRING,
-            },
-            billingMode: dynamoDb.BillingMode.PAY_PER_REQUEST,
-            removalPolicy: RemovalPolicy.DESTROY,
-        });
+    const saturdayPaperTable = new dynamoDb.Table(
+      this,
+      "SaturdayPaperEmailSubs",
+      {
+        tableName: "SaturdayPaperEmailSubs",
+        partitionKey: {
+          name: "email",
+          type: dynamoDb.AttributeType.STRING,
+        },
+        billingMode: dynamoDb.BillingMode.PAY_PER_REQUEST,
+        removalPolicy: RemovalPolicy.DESTROY,
+      },
+    );
 
-        const blockPublicAccess = new s3.BlockPublicAccess({
-            blockPublicAcls: false,
-            blockPublicPolicy: false,
-            ignorePublicAcls: false,
-            restrictPublicBuckets: false,
-        });
+    const blockPublicAccess = new s3.BlockPublicAccess({
+      blockPublicAcls: false,
+      blockPublicPolicy: false,
+      ignorePublicAcls: false,
+      restrictPublicBuckets: false,
+    });
 
-        const bucket = new s3.Bucket(this, "SubstackFeedBucket", {
-            removalPolicy: RemovalPolicy.DESTROY,
-            autoDeleteObjects: true,
-            blockPublicAccess: blockPublicAccess,
-            publicReadAccess: true,
-            websiteIndexDocument: "feed.json",
-            cors: [
-                {
-                    allowedOrigins: ['*'],
-                    allowedMethods: [s3.HttpMethods.GET],
-                    allowedHeaders: ['*'],
-                    exposedHeaders: [],
-                },
-            ],
-        });
+    const bucket = new s3.Bucket(this, "SubstackFeedBucket", {
+      removalPolicy: RemovalPolicy.DESTROY,
+      autoDeleteObjects: true,
+      blockPublicAccess: blockPublicAccess,
+      publicReadAccess: true,
+      websiteIndexDocument: "feed.json",
+      cors: [
+        {
+          allowedOrigins: ["*"],
+          allowedMethods: [s3.HttpMethods.GET],
+          allowedHeaders: ["*"],
+          exposedHeaders: [],
+        },
+      ],
+    });
 
-        const substackFeedLambda = new lambda.Function(this, "SubstackFeedLambda", {
-            runtime: lambda.Runtime.NODEJS_22_X,
-            code: lambda.Code.fromAsset("lambda/dist"),
-            handler: "index.handler",
-            environment: {
-                BUCKET_NAME: bucket.bucketName,
-                FEED_URL: "https://kararedman.substack.com/feed",
-            },
-        });
+    const substackFeedLambda = new lambda.Function(this, "SubstackFeedLambda", {
+      runtime: lambda.Runtime.NODEJS_22_X,
+      code: lambda.Code.fromAsset("lambda/dist"),
+      handler: "index.handler",
+      environment: {
+        BUCKET_NAME: bucket.bucketName,
+        FEED_URL: "https://kararedman.substack.com/feed",
+      },
+    });
 
-        bucket.grantPut(substackFeedLambda);
+    bucket.grantPut(substackFeedLambda);
 
-        const subscribeLambda = new lambda.Function(this, "SubstackSubscribeLambda", {
-            runtime: lambda.Runtime.NODEJS_22_X,
-            code: lambda.Code.fromAsset("lambda/dist"),
-            handler: "subscribe.handler",
-            environment: {
-                TABLE_NAME: saturdayPaperTable.tableName,
-            },
-        });
+    const subscribeLambda = new lambda.Function(
+      this,
+      "SubstackSubscribeLambda",
+      {
+        runtime: lambda.Runtime.NODEJS_22_X,
+        code: lambda.Code.fromAsset("lambda/dist"),
+        handler: "subscribe.handler",
+        environment: {
+          TABLE_NAME: saturdayPaperTable.tableName,
+        },
+      },
+    );
 
-        saturdayPaperTable.grantWriteData(subscribeLambda);
+    saturdayPaperTable.grantWriteData(subscribeLambda);
 
-        const api = new apigateway.RestApi(this, "SubstackApiGateway", {
-            restApiName: "KaraSubstackApi",
-            defaultCorsPreflightOptions: {
-                allowOrigins: apigateway.Cors.ALL_ORIGINS,
-                allowMethods: apigateway.Cors.ALL_METHODS,
-            },
-        });
+    const api = new apigateway.RestApi(this, "SubstackApiGateway", {
+      restApiName: "KaraSubstackApi",
+      defaultCorsPreflightOptions: {
+        allowOrigins: apigateway.Cors.ALL_ORIGINS,
+        allowMethods: apigateway.Cors.ALL_METHODS,
+      },
+    });
 
-        api.root.addProxy({
-            defaultIntegration: new apigateway.LambdaIntegration(substackFeedLambda),
-            anyMethod: true,
-        });
+    api.root.addProxy({
+      defaultIntegration: new apigateway.LambdaIntegration(substackFeedLambda, {
+        proxy: true,
+      }),
+      anyMethod: true,
+    });
 
-        const subscribe = api.root.addResource("subscribe")
-        subscribe.addMethod("POST", new apigateway.LambdaIntegration(subscribeLambda), {
-            methodResponses: [
-                {
-                    statusCode: "200",
-                    responseParameters: {
-                        "method.response.header.Access-Control-Allow-Origin": true,
-                    },
-                },
-            ],
-        })
-    }
+    const subscribe = api.root.addResource("subscribe");
+    subscribe.addMethod(
+      "POST",
+      new apigateway.LambdaIntegration(subscribeLambda, { proxy: true }),
+      {},
+    );
+  }
 }
