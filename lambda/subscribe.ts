@@ -9,6 +9,10 @@ export const handler = async (event: any) => {
       return {
         statusCode: 400,
         body: JSON.stringify({ message: "Missing request body." }),
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Content-Type": "application/json",
+        },
       };
     }
 
@@ -19,6 +23,10 @@ export const handler = async (event: any) => {
       return {
         statusCode: 400,
         body: JSON.stringify({ message: "Invalid email." }),
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Content-Type": "application/json",
+        },
       };
     }
 
@@ -34,14 +42,27 @@ export const handler = async (event: any) => {
     });
 
     await client.send(putCommand);
-  } catch (error) {
-        console.error(`Error: ${error}`)
 
-        return {
-            statusCode: 500,
-            body: JSON.stringify({ message: "Internal server error" })
-        };
-    }
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ message: "Email recorded" }),
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Content-Type": "application/json",
+      },
+    };
+  } catch (error) {
+    console.error(`Error: ${error}`);
+
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ message: "Internal server error" }),
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Content-Type": "application/json",
+      },
+    };
+  }
 };
 
 function validateEmail(email: string): boolean {
