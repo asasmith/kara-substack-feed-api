@@ -39,7 +39,7 @@ export class SubstackEmailSyncCIRole extends Stack {
     ciDynamoRole.addToPolicy(
       new iam.PolicyStatement({
         actions: ["dynamodb:scan", "dynamodb:UpdateItem"],
-        resources: [`arn:aws:dynamodb:${this.region}:${this.account}:table/SaturdayPaperEmailsubs`],
+        resources: [`arn:aws:dynamodb:${this.region}:${this.account}:table/SaturdayPaperEmailSubs`],
       }),
     );
   }
