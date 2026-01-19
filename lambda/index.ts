@@ -59,6 +59,8 @@ const isScheduledEvent = (event: LambdaEvent): event is ScheduledEvent =>
     (event as ScheduledEvent).source === "aws.events";
 
 const isApiEvent = (event: LambdaEvent): event is ApiGatewayEvent =>
+    !isScheduledEvent(event) &&
+    Object.prototype.hasOwnProperty.call(event, "httpMethod") &&
     typeof (event as ApiGatewayEvent).httpMethod === "string";
 
 export const handler = async (event: LambdaEvent) => {
@@ -73,24 +75,25 @@ export const handler = async (event: LambdaEvent) => {
         requestId,
     });
 
-    try {
-        const isPostRequest = apiEvent && event.httpMethod === "POST";
-        const isValidEvent = scheduledEvent || isPostRequest;
+    const isPostRequest = apiEvent && event.httpMethod === "POST";
+    const isValidEvent = scheduledEvent || isPostRequest;
 
-        if (!isValidEvent) {
-            if (apiEvent) {
-                return {
-                    statusCode: 405,
-                    body: JSON.stringify({ message: "method not allowed" }),
-                };
-            }
-
-            log("error", "Unhandled event type", {
-                eventType,
-                requestId,
-            });
-            throw new Error("Unhandled event type");
+    if (!isValidEvent) {
+        if (apiEvent) {
+            return {
+                statusCode: 405,
+                body: JSON.stringify({ message: "method not allowed" }),
+            };
         }
+
+        log("error", "unhandled event type", {
+            eventType,
+            requestId,
+        });
+        throw new Error("unhandled event type");
+    }
+
+    try {
 
         const feedUrl = process.env.FEED_URL || "";
         const bucketName = process.env.BUCKET_NAME || "";
@@ -101,8 +104,12 @@ export const handler = async (event: LambdaEvent) => {
 
         const feed = await parser.parseURL(feedUrl);
 
-        console.log(`Feed title: ${feed.title}`);
-        console.log(`Feed items: ${feed.items?.length}`);
+        log("info", "feed parsed", {
+            feedTitle: feed.title,
+            feedItemCount: feed.items?.length ?? 0,
+            requestId,
+            eventType,
+        });
 
         const posts: RSSPost[] = feed.items.slice(0, 5).map((item: any) => {
             const { title, link, pubDate, contentSnippet } = item;
@@ -130,14 +137,15 @@ export const handler = async (event: LambdaEvent) => {
             };
         }
 
-        log("info", "Feed written to s3", { requestId });
+        log("info", "feed written to s3", { requestId, eventType });
         return;
     } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error";
 
-        log("error", "Error processing request", {
+        log("error", "error processing request", {
             errorMessage,
             requestId,
+            eventType,
         });
 
         if (apiEvent) {
@@ -147,6 +155,6 @@ export const handler = async (event: LambdaEvent) => {
             };
         }
 
-        return;
+        throw error;
     }
 };

@@ -83,10 +83,9 @@ describe("feed handler", () => {
         expect(sendMock).not.toHaveBeenCalled();
     });
 
-    it("ignores unsupported events", async () => {
-        const result = await handler({});
+    it("throws for unsupported events", async () => {
+        await expect(handler({})).rejects.toThrow("unhandled event type");
 
-        expect(result).toBeUndefined();
         expect(parseUrlMock).not.toHaveBeenCalled();
         expect(sendMock).not.toHaveBeenCalled();
     });
