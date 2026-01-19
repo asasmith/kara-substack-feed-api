@@ -1,4 +1,4 @@
-import { Stack, StackProps, RemovalPolicy } from "aws-cdk-lib";
+import { Stack, StackProps, RemovalPolicy, Duration } from "aws-cdk-lib";
 import { Construct } from "constructs";
 import * as s3 from "aws-cdk-lib/aws-s3";
 import * as lambda from "aws-cdk-lib/aws-lambda";
@@ -52,6 +52,7 @@ export class KaraSubstackFeedApiStack extends Stack {
             runtime: lambda.Runtime.NODEJS_22_X,
             code: lambda.Code.fromAsset("lambda/dist"),
             handler: "index.handler",
+            timeout: Duration.seconds(15),
             environment: {
                 BUCKET_NAME: bucket.bucketName,
                 FEED_URL: "https://kararedman.substack.com/feed",
@@ -92,12 +93,18 @@ export class KaraSubstackFeedApiStack extends Stack {
             },
         });
 
-        api.root.addProxy({
-            defaultIntegration: new apigateway.LambdaIntegration(substackFeedLambda, {
-                proxy: true,
-            }),
-            anyMethod: true,
-        });
+        // api.root.addProxy({
+        //     defaultIntegration: new apigateway.LambdaIntegration(substackFeedLambda, {
+        //         proxy: true,
+        //     }),
+        //     anyMethod: true,
+        // });
+
+        const feed = api.root.addResource("feed-update");
+        feed.addMethod(
+            "POST",
+            new apigateway.LambdaIntegration(substackFeedLambda, { proxy: true }),
+        );
 
         const subscribe = api.root.addResource("subscribe");
         subscribe.addMethod(
