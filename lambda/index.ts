@@ -5,6 +5,9 @@ interface LambdaEvent {
     httpMethod?: string;
     source?: string;
     body?: string;
+    requestContext?: {
+        requestId?: string;
+    };
 }
 
 interface RSSPost {
@@ -14,22 +17,32 @@ interface RSSPost {
     contentSnippet: string;
 }
 
-const s3 = new S3Client();
+const s3 = new S3Client({ region: process.env.AWS_REGION });
 const parser = new Parser();
 
 export const handler = async (event: LambdaEvent) => {
-    console.log("Handler invoked");
-    console.log(`Event: ${JSON.stringify(event)}`);
+    const isScheduledEvent = event.source === "aws.events";
+    const isApiEvent = typeof event.httpMethod === "string";
+    const requestId = event.requestContext?.requestId;
+
+    console.log("Handler invoked", {
+        isScheduledEvent,
+        isApiEvent,
+        httpMethod: event.httpMethod,
+        requestId,
+    });
 
     try {
-        const isScheduledEvent = event.source === "aws.events";
-        const isPostRequest = event.httpMethod === "POST";
+        if (!isScheduledEvent && !(isApiEvent && event.httpMethod === "POST")) {
+            if (isApiEvent) {
+                return {
+                    statusCode: 405,
+                    body: JSON.stringify({ message: "method not allowed" }),
+                };
+            }
 
-        if (!isScheduledEvent && !isPostRequest) {
-            return {
-                statusCode: 405,
-                body: JSON.stringify({ message: "method not allowed" }),
-            };
+            console.warn("Unhandled event type", { source: event.source, requestId });
+            return;
         }
 
         const feedUrl = process.env.FEED_URL || "";
@@ -63,16 +76,25 @@ export const handler = async (event: LambdaEvent) => {
             }),
         );
 
-        return {
-            statusCode: 200,
-            body: JSON.stringify({ message: "Feed written to s3" }),
-        };
-    } catch (error) {
-        console.error(`Error processing request: ${error}`);
+        if (isApiEvent) {
+            return {
+                statusCode: 200,
+                body: JSON.stringify({ message: "Feed written to s3" }),
+            };
+        }
 
-        return {
-            statusCode: 500,
-            body: JSON.stringify({ message: error }),
-        };
+        console.log("Feed written to s3", { requestId });
+        return;
+    } catch (error) {
+        console.error("Error processing request", { error, requestId });
+
+        if (isApiEvent) {
+            return {
+                statusCode: 500,
+                body: JSON.stringify({ message: "Internal server error" }),
+            };
+        }
+
+        return;
     }
 };

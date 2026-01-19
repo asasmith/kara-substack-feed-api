@@ -93,13 +93,6 @@ export class KaraSubstackFeedApiStack extends Stack {
             },
         });
 
-        // api.root.addProxy({
-        //     defaultIntegration: new apigateway.LambdaIntegration(substackFeedLambda, {
-        //         proxy: true,
-        //     }),
-        //     anyMethod: true,
-        // });
-
         const feed = api.root.addResource("feed-update");
         feed.addMethod(
             "POST",
