@@ -1,14 +1,28 @@
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import Parser from "rss-parser";
 
-interface LambdaEvent {
-    httpMethod?: string;
-    source?: string;
+interface ApiGatewayEvent {
+    httpMethod: string;
     body?: string;
     requestContext?: {
         requestId?: string;
     };
 }
+
+interface ScheduledEvent {
+    source: "aws.events";
+}
+
+interface UnsupportedEvent {
+    source?: string;
+    httpMethod?: string;
+    body?: string;
+    requestContext?: {
+        requestId?: string;
+    };
+}
+
+type LambdaEvent = ApiGatewayEvent | ScheduledEvent | UnsupportedEvent;
 
 interface RSSPost {
     title: string;
@@ -20,29 +34,62 @@ interface RSSPost {
 const s3 = new S3Client({ region: process.env.AWS_REGION });
 const parser = new Parser();
 
-export const handler = async (event: LambdaEvent) => {
-    const isScheduledEvent = event.source === "aws.events";
-    const isApiEvent = typeof event.httpMethod === "string";
-    const requestId = event.requestContext?.requestId;
+const log = (
+    level: "info" | "warn" | "error",
+    message: string,
+    context: Record<string, unknown> = {},
+) => {
+    const payload = {
+        level,
+        message,
+        timestamp: new Date().toISOString(),
+        ...context,
+    };
 
-    console.log("Handler invoked", {
-        isScheduledEvent,
-        isApiEvent,
-        httpMethod: event.httpMethod,
+    if (level === "error") {
+        console.error(payload);
+    } else if (level === "warn") {
+        console.warn(payload);
+    } else {
+        console.log(payload);
+    }
+};
+
+const isScheduledEvent = (event: LambdaEvent): event is ScheduledEvent =>
+    (event as ScheduledEvent).source === "aws.events";
+
+const isApiEvent = (event: LambdaEvent): event is ApiGatewayEvent =>
+    typeof (event as ApiGatewayEvent).httpMethod === "string";
+
+export const handler = async (event: LambdaEvent) => {
+    const scheduledEvent = isScheduledEvent(event);
+    const apiEvent = isApiEvent(event);
+    const requestId = apiEvent ? event.requestContext?.requestId : undefined;
+    const eventType = scheduledEvent ? "scheduled" : apiEvent ? "api" : "unknown";
+
+    log("info", "Handler invoked", {
+        eventType,
+        httpMethod: apiEvent ? event.httpMethod : undefined,
         requestId,
     });
 
     try {
-        if (!isScheduledEvent && !(isApiEvent && event.httpMethod === "POST")) {
-            if (isApiEvent) {
+        const isPostRequest = apiEvent && event.httpMethod === "POST";
+        const isValidEvent = scheduledEvent || isPostRequest;
+
+        if (!isValidEvent) {
+            if (apiEvent) {
                 return {
                     statusCode: 405,
                     body: JSON.stringify({ message: "method not allowed" }),
                 };
             }
 
-            console.warn("Unhandled event type", { source: event.source, requestId });
-            return;
+            log("error", "Unhandled event type", {
+                eventType,
+                requestId,
+            });
+            throw new Error("Unhandled event type");
         }
 
         const feedUrl = process.env.FEED_URL || "";
@@ -76,19 +123,24 @@ export const handler = async (event: LambdaEvent) => {
             }),
         );
 
-        if (isApiEvent) {
+        if (apiEvent) {
             return {
                 statusCode: 200,
                 body: JSON.stringify({ message: "Feed written to s3" }),
             };
         }
 
-        console.log("Feed written to s3", { requestId });
+        log("info", "Feed written to s3", { requestId });
         return;
-    } catch (error) {
-        console.error("Error processing request", { error, requestId });
+    } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error";
 
-        if (isApiEvent) {
+        log("error", "Error processing request", {
+            errorMessage,
+            requestId,
+        });
+
+        if (apiEvent) {
             return {
                 statusCode: 500,
                 body: JSON.stringify({ message: "Internal server error" }),
