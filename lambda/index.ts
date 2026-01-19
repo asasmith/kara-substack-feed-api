@@ -60,7 +60,6 @@ const isScheduledEvent = (event: LambdaEvent): event is ScheduledEvent =>
 
 const isApiEvent = (event: LambdaEvent): event is ApiGatewayEvent =>
     !isScheduledEvent(event) &&
-    Object.prototype.hasOwnProperty.call(event, "httpMethod") &&
     typeof (event as ApiGatewayEvent).httpMethod === "string";
 
 export const handler = async (event: LambdaEvent) => {
