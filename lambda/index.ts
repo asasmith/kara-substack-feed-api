@@ -1,68 +1,159 @@
-import { S3 } from "aws-sdk";
+import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import Parser from "rss-parser";
 
-interface LambdaEvent {
-  httpMethod: string;
-  body?: string;
+interface ApiGatewayEvent {
+    httpMethod: string;
+    body?: string;
+    requestContext?: {
+        requestId?: string;
+    };
 }
+
+interface ScheduledEvent {
+    source: "aws.events";
+}
+
+interface UnsupportedEvent {
+    source?: string;
+    httpMethod?: string;
+    body?: string;
+    requestContext?: {
+        requestId?: string;
+    };
+}
+
+type LambdaEvent = ApiGatewayEvent | ScheduledEvent | UnsupportedEvent;
 
 interface RSSPost {
-  title: string;
-  link: string;
-  pubDate: string;
-  contentSnippet: string;
+    title: string;
+    link: string;
+    pubDate: string;
+    contentSnippet: string;
 }
 
-const s3 = new S3();
+const s3 = new S3Client({ region: process.env.AWS_REGION });
 const parser = new Parser();
 
-export const handler = async (event: LambdaEvent) => {
-  try {
-    if (event.httpMethod !== "POST") {
-      return {
-        statusCode: 405,
-        body: JSON.stringify({ message: "method not allowed" }),
-      };
+const log = (
+    level: "info" | "warn" | "error",
+    message: string,
+    context: Record<string, unknown> = {},
+) => {
+    const payload = {
+        level,
+        message,
+        timestamp: new Date().toISOString(),
+        ...context,
+    };
+
+    if (level === "error") {
+        console.error(payload);
+    } else if (level === "warn") {
+        console.warn(payload);
+    } else {
+        console.log(payload);
     }
+};
 
-    const feedUrl = process.env.FEED_URL || "";
-    const bucketName = process.env.BUCKET_NAME || "";
+const isScheduledEvent = (event: LambdaEvent): event is ScheduledEvent =>
+    (event as ScheduledEvent).source === "aws.events";
 
-    const feed = await parser.parseURL(feedUrl);
+const isApiEvent = (event: LambdaEvent): event is ApiGatewayEvent =>
+    !isScheduledEvent(event) &&
+    typeof (event as ApiGatewayEvent).httpMethod === "string";
 
-    console.log(`Feed title: ${feed.title}`);
-    console.log(`Feed items: ${feed.items?.length}`);
+export const handler = async (event: LambdaEvent) => {
+    const scheduledEvent = isScheduledEvent(event);
+    const apiEvent = isApiEvent(event);
+    const requestId = apiEvent ? event.requestContext?.requestId : undefined;
+    const eventType = scheduledEvent ? "scheduled" : apiEvent ? "api" : "unknown";
 
-
-    const posts: RSSPost[] = feed.items.slice(0, 5).map((item: any) => {
-      const { title, link, pubDate, contentSnippet } = item;
-      return {
-        title,
-        link,
-        pubDate,
-        contentSnippet,
-      };
+    log("info", "Handler invoked", {
+        eventType,
+        httpMethod: apiEvent ? event.httpMethod : undefined,
+        requestId,
     });
 
-    await s3
-      .putObject({
-        Bucket: bucketName,
-        Key: "feed.json",
-        Body: JSON.stringify(posts, null, 2),
-        ContentType: "application/json",
-      })
-      .promise();
+    const isPostRequest = apiEvent && event.httpMethod === "POST";
+    const isValidEvent = scheduledEvent || isPostRequest;
 
-    return {
-      statusCode: 200,
-      body: JSON.stringify({ message: "Feed written to s3" }),
-    };
-  } catch (error) {
-    console.error(`Error processing request: ${error}`);
+    if (!isValidEvent) {
+        if (apiEvent) {
+            return {
+                statusCode: 405,
+                body: JSON.stringify({ message: "method not allowed" }),
+            };
+        }
 
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ message: "Internal server error" }),
-    };
-  }
+        log("error", "unhandled event type", {
+            eventType,
+            requestId,
+        });
+        throw new Error("unhandled event type");
+    }
+
+    try {
+
+        const feedUrl = process.env.FEED_URL || "";
+        const bucketName = process.env.BUCKET_NAME || "";
+
+        if (!feedUrl || !bucketName) {
+            throw new Error("missing feed url and/or bucket name");
+        }
+
+        const feed = await parser.parseURL(feedUrl);
+
+        log("info", "feed parsed", {
+            feedTitle: feed.title,
+            feedItemCount: feed.items?.length ?? 0,
+            requestId,
+            eventType,
+        });
+
+        const posts: RSSPost[] = feed.items.slice(0, 5).map((item: any) => {
+            const { title, link, pubDate, contentSnippet } = item;
+            return {
+                title,
+                link,
+                pubDate,
+                contentSnippet,
+            };
+        });
+
+        await s3.send(
+            new PutObjectCommand({
+                Bucket: bucketName,
+                Key: "feed.json",
+                Body: JSON.stringify(posts, null, 2),
+                ContentType: "application/json",
+            }),
+        );
+
+        if (apiEvent) {
+            return {
+                statusCode: 200,
+                body: JSON.stringify({ message: "Feed written to s3" }),
+            };
+        }
+
+        log("info", "feed written to s3", { requestId, eventType });
+        return;
+    } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error";
+
+        log("error", "error processing request", {
+            errorMessage,
+            requestId,
+            eventType,
+        });
+
+        if (apiEvent) {
+            return {
+                statusCode: 500,
+                body: JSON.stringify({ message: "Internal server error" }),
+            };
+        }
+
+        throw error;
+    }
 };
