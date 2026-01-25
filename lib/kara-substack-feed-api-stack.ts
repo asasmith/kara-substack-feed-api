@@ -1,11 +1,13 @@
 import { Stack, StackProps, RemovalPolicy, Duration } from "aws-cdk-lib";
 import { Construct } from "constructs";
 import * as s3 from "aws-cdk-lib/aws-s3";
-import * as lambda from "aws-cdk-lib/aws-lambda";
+import { Runtime } from "aws-cdk-lib/aws-lambda";
+import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import * as apigateway from "aws-cdk-lib/aws-apigateway";
 import * as dynamoDb from "aws-cdk-lib/aws-dynamodb";
 import * as events from "aws-cdk-lib/aws-events";
 import * as targets from "aws-cdk-lib/aws-events-targets";
+import path from "path";
 
 export class KaraSubstackFeedApiStack extends Stack {
     constructor(scope: Construct, id: string, props?: StackProps) {
@@ -48,10 +50,10 @@ export class KaraSubstackFeedApiStack extends Stack {
             ],
         });
 
-        const substackFeedLambda = new lambda.Function(this, "SubstackFeedLambda", {
-            runtime: lambda.Runtime.NODEJS_22_X,
-            code: lambda.Code.fromAsset("lambda/dist"),
-            handler: "index.handler",
+        const substackFeedLambda = new NodejsFunction(this, "SubstackFeedLambda", {
+            runtime: Runtime.NODEJS_22_X,
+            entry: path.join(__dirname, "../lambda/index.ts"),
+            handler: "handler",
             timeout: Duration.seconds(15),
             environment: {
                 BUCKET_NAME: bucket.bucketName,
@@ -63,20 +65,20 @@ export class KaraSubstackFeedApiStack extends Stack {
 
         new events.Rule(this, "WeeklyWebBlogUpdate", {
             schedule: events.Schedule.cron({
-                minute: "30",
-                hour: "14",
+                minute: "0",
+                hour: "21",
                 weekDay: "SAT",
             }),
             targets: [new targets.LambdaFunction(substackFeedLambda)],
         });
 
-        const subscribeLambda = new lambda.Function(
+        const subscribeLambda = new NodejsFunction(
             this,
             "SubstackSubscribeLambda",
             {
-                runtime: lambda.Runtime.NODEJS_22_X,
-                code: lambda.Code.fromAsset("lambda/dist"),
-                handler: "subscribe.handler",
+                runtime: Runtime.NODEJS_22_X,
+                entry: path.join(__dirname, "../lambda/subscribe.ts"),
+                handler: "handler",
                 environment: {
                     TABLE_NAME: saturdayPaperTable.tableName,
                 },
