@@ -41,6 +41,7 @@ export class SubstackGithubDeployRoleStack extends cdk.Stack {
         actions: [
           "cloudformation:CreateStack",
           "cloudformation:UpdateStack",
+          "cloudformation:DescribeStackEvents",
           "cloudformation:DescribeStacks",
           "cloudformation:GetTemplate",
           "cloudformation:DescribeStackResources",
